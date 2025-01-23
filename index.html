@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marma TTS Demo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="top-panel">
+        <!-- Marma alphabet buttons -->
+        <div class="alphabet-buttons">
+            <script>
+                const marmaAlphabet = 'ဆတနမအပကငသစဟဩ၏ဈဝဣဌဤဩ၌ဥ၍ဏဧဗဒဓဂဎဖထခလဘညယဇဌဃဠယဉရ';
+                marmaAlphabet.split('').forEach(letter => {
+                    document.write(`<button onclick="appendLetter('${letter}')">${letter}</button>`);
+                });
+            </script>
+        </div>
+
+        <!-- Diacritic marks buttons -->
+        <div class="diacritic-buttons">
+            <script>
+                const diacriticMarks = 'ါာိီုူေဲံ့း္်ျြွှ';
+                diacriticMarks.split('').forEach(mark => {
+                    document.write(`<button class="diacritic" onclick="appendDiacritic('${mark}')">${mark}</button>`);
+                });
+            </script>
+        </div>
+    </div>
+
+    <div class="text-box-container">
+        <input type="text" id="text-box" placeholder="Text will appear here">
+        <button class="delete-button" onclick="clearTextBox()">
+            <i class="fa-solid fa-delete-left"></i>
+        </button>
+        <button class="play-button" onclick="playText()">
+            <i class="fas fa-play"></i>
+        </button>
+    </div>
+
+    <!-- Tabbed interface -->
+    <div class="tabs">
+        <button id="tab-button-1" class="tab-button active" onclick="showTabContent('tab1', 'content/content1')">Content 1</button>
+        <button id="tab-button-2" class="tab-button" onclick="showTabContent('tab2', 'content/content2')">Content 2</button>
+    </div>
+
+    <div id="tab1" class="tab-content active">
+        <div class="sentences-box" id="sentences-box-tab1"></div>
+    </div>
+
+    <div id="tab2" class="tab-content">
+        <div class="sentences-box" id="sentences-box-tab2"></div>
+    </div>
+
+    <script>
+        function appendLetter(letter) {
+            document.getElementById('text-box').value += letter;
+        }
+
+        function appendDiacritic(mark) {
+            document.getElementById('text-box').value += mark;
+        }
+
+        function loadWord(word) {
+            document.getElementById('text-box').value = word;
+        }
+
+        function clearTextBox() {
+            document.getElementById('text-box').value = '';
+        }
+
+        async function playText() {
+            const text = document.getElementById('text-box').value;
+            if (!text.trim()) return;
+
+            try {
+                const response = await fetch('https://moisil.translatorswb.org/tts/api/short', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        lang: 'rmz'
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to synthesize speech');
+
+                const blob = await response.blob();
+                const audio = new Audio(URL.createObjectURL(blob));
+                audio.play();
+            } catch (error) {
+                console.error('Error playing audio:', error);
+                alert('Error synthesizing speech. Please try again.');
+            }
+        }
+
+        function splitWords(event) {
+            const target = event.target;
+            if (target.getAttribute('data-split') === 'true') return;
+
+            const sentence = target.innerText.trim().split(/\s+/);
+            target.innerHTML = '';
+            
+            sentence.forEach((word, index) => {
+                const wordSpan = document.createElement('span');
+                wordSpan.innerText = word;
+                wordSpan.style.cursor = 'pointer';
+                wordSpan.onclick = () => loadWord(word);
+                target.appendChild(wordSpan);
+                if (index < sentence.length - 1) {
+                    target.appendChild(document.createTextNode(' '));
+                }
+            });
+
+            target.setAttribute('data-split', 'true');
+        }
+
+        async function loadContent(contentDir, boxId, tabId) {
+            try {
+                const titleResponse = await fetch(`${contentDir}/title.txt`);
+                const titleText = await titleResponse.text();
+                document.querySelector(`#tab-button-${tabId.slice(-1)}`).innerText = titleText.trim();
+
+                const contentResponse = await fetch(`${contentDir}/content.txt`);
+                const contentText = await contentResponse.text();
+                updateUI(contentText.trim().split('\n'), boxId);
+            } catch (error) {
+                console.error('Error loading content:', error);
+                document.getElementById(boxId).innerHTML = '<p>Error loading content</p>';
+            }
+        }
+
+        function updateUI(contentLines, boxId) {
+            const sentencesBox = document.getElementById(boxId);
+            sentencesBox.innerHTML = '';
+
+            contentLines.forEach(line => {
+                const sentenceContainer = document.createElement('div');
+                sentenceContainer.className = 'sentence-container';
+
+                const sentenceDiv = document.createElement('div');
+                sentenceDiv.innerText = line.trim();
+                sentenceDiv.onclick = (event) => {
+                    loadWord(line.trim());
+                    splitWords(event);
+                };
+                sentenceContainer.appendChild(sentenceDiv);
+                sentencesBox.appendChild(sentenceContainer);
+            });
+        }
+
+        function showTabContent(tabId, contentDir) {
+            const tabs = document.getElementsByClassName('tab-button');
+            const contents = document.getElementsByClassName('tab-content');
+
+            Array.from(tabs).forEach(tab => tab.classList.remove('active'));
+            Array.from(contents).forEach(content => content.classList.remove('active'));
+
+            document.querySelector(`.tab-button[onclick="showTabContent('${tabId}', '${contentDir}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+
+            loadContent(contentDir, `sentences-box-${tabId}`, tabId);
+        }
+
+        window.onload = async () => {
+            // Load both titles first
+            const tab1Title = await fetch('content/content1/title.txt').then(r => r.text());
+            const tab2Title = await fetch('content/content2/title.txt').then(r => r.text());
+            document.querySelector('#tab-button-1').innerText = tab1Title.trim();
+            document.querySelector('#tab-button-2').innerText = tab2Title.trim();
+            
+            // Then show first tab content
+            showTabContent('tab1', 'content/content1');
+        };
+    </script>
+</body>
+</html>
